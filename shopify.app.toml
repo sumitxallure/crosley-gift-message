@@ -1,0 +1,36 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "b33bb20bfbbbb8b024d2e35c30b51a61"
+name = "Crosley Gift Message"
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_orders"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[order.metafields.app.gift_message]
+type = "multi_line_text_field"
+name = "Gift message"
+description = "A gift message entered by the customer during checkout."
+access.admin = "merchant_read_write"
+capabilities.cart_to_order_copyable = true
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+[auth]
+redirect_urls = [ ]
+
+[build]
+automatically_update_urls_on_dev = true

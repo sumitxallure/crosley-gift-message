@@ -1,0 +1,8 @@
+{
+  "heading": "Ajouter un message cadeau",
+  "description": "Écrivez un court message à joindre à cette commande.",
+  "label": "Message cadeau (facultatif)",
+  "saved": "Message cadeau enregistré.",
+  "saveError": "Nous n'avons pas pu enregistrer votre message. Veuillez réessayer.",
+  "metafieldChangesAreNotSupported": "Les messages cadeau ne sont pas disponibles avec ce mode de paiement."
+}
