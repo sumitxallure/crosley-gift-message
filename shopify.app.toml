@@ -2,7 +2,7 @@
 
 client_id = "b33bb20bfbbbb8b024d2e35c30b51a61"
 name = "Crosley Gift Message"
-application_url = "https://example.com"
+application_url = "https://crosley-gift-message.onrender.com"
 embedded = true
 
 [access_scopes]
@@ -30,7 +30,7 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = [ "https://crosley-gift-message.onrender.com/auth/callback" ]
 
 [build]
 automatically_update_urls_on_dev = true
