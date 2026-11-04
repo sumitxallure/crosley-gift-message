@@ -14,7 +14,7 @@ use_legacy_install_flow = false
 [order.metafields.app.gift_message]
 type = "multi_line_text_field"
 name = "Gift message"
-description = "A gift message entered by the customer during checkout."
+description = "A customer gift message captured during checkout and copied to the order."
 access.admin = "merchant_read_write"
 capabilities.cart_to_order_copyable = true
 
