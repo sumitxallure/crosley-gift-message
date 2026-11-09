@@ -1,349 +1,294 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useFetcher } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import {
+  DEFAULT_GIFT_MESSAGE_SETTINGS,
+  GIFT_MESSAGE_SETTINGS_KEY,
+  MAX_MESSAGE_LENGTH,
+  MIN_MESSAGE_LENGTH,
+  parseGiftMessageSettings,
+  validateGiftMessageSettings,
+  type GiftMessageSettings,
+  type GiftMessageSettingsErrors,
+} from "../gift-message-settings";
+import { authenticate } from "../shopify.server";
+
+const SETTINGS_QUERY = `#graphql
+  query GiftMessageSettings {
+    shop {
+      id
+      giftMessageSettings: metafield(
+        namespace: "$app"
+        key: "gift_message_settings"
+      ) {
+        jsonValue
+      }
+    }
+  }
+`;
+
+const SAVE_SETTINGS_MUTATION = `#graphql
+  mutation SaveGiftMessageSettings($metafields: [MetafieldsSetInput!]!) {
+    metafieldsSet(metafields: $metafields) {
+      metafields {
+        key
+        jsonValue
+      }
+      userErrors {
+        field
+        message
+        code
+      }
+    }
+  }
+`;
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-
-  return null;
-};
-
-export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
-  const color = ["Red", "Orange", "Yellow", "Green"][
-    Math.floor(Math.random() * 4)
-  ];
-  const response = await admin.graphql(
-    `#graphql
-      mutation populateProduct($product: ProductCreateInput!) {
-        productCreate(product: $product) {
-          product {
-            id
-            title
-            handle
-            status
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  price
-                  barcode
-                  createdAt
-                }
-              }
-            }
-            demoInfo: metafield(namespace: "$app", key: "demo_info") {
-              jsonValue
-            }
-          }
-        }
-      }`,
-    {
-      variables: {
-        product: {
-          title: `${color} Snowboard`,
-          metafields: [
-            {
-              namespace: "$app",
-              key: "demo_info",
-              value: "Created by React Router Template",
-            },
-          ],
-        },
-      },
-    },
-  );
+  const response = await admin.graphql(SETTINGS_QUERY);
   const responseJson = await response.json();
 
-  const product = responseJson.data!.productCreate!.product!;
-  const variantId = product.variants.edges[0]!.node!.id!;
-
-  const variantResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-        productVariants {
-          id
-          price
-          barcode
-          createdAt
-        }
-      }
-    }`,
-    {
-      variables: {
-        productId: product.id,
-        variants: [{ id: variantId, price: "100.00" }],
-      },
-    },
-  );
-
-  const variantResponseJson = await variantResponse.json();
-
-  const metaobjectResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpsertMetaobject($handle: MetaobjectHandleInput!, $values: JSON!) {
-      metaobjectUpsert(handle: $handle, values: $values) {
-        metaobject {
-          id
-          handle
-          values
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }`,
-    {
-      variables: {
-        handle: {
-          type: "$app:example",
-          handle: "demo-entry",
-        },
-        values: {
-          title: "Demo Entry",
-          description:
-            "This metaobject was created by the Shopify app template to demonstrate the metaobject API.",
-        },
-      },
-    },
-  );
-
-  const metaobjectResponseJson = await metaobjectResponse.json();
-
   return {
-    product: responseJson!.data!.productCreate!.product,
-    variant:
-      variantResponseJson!.data!.productVariantsBulkUpdate!.productVariants,
-    metaobject: metaobjectResponseJson!.data!.metaobjectUpsert!.metaobject,
+    settings: parseGiftMessageSettings(
+      responseJson.data?.shop?.giftMessageSettings?.jsonValue,
+    ),
   };
 };
 
-export default function Index() {
-  const fetcher = useFetcher<typeof action>();
+type ActionData = {
+  saved: boolean;
+  settings: GiftMessageSettings | null;
+  errors: GiftMessageSettingsErrors;
+};
 
+export const action = async ({
+  request,
+}: ActionFunctionArgs): Promise<ActionData> => {
+  const { admin } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const validation = validateGiftMessageSettings({
+    enabled: formData.get("enabled") === "true",
+    heading: String(formData.get("heading") ?? ""),
+    description: String(formData.get("description") ?? ""),
+    maxLength: String(formData.get("maxLength") ?? ""),
+    required: formData.get("required") === "true",
+  });
+
+  if (!validation.settings) {
+    return { saved: false, settings: null, errors: validation.errors };
+  }
+
+  const shopResponse = await admin.graphql(SETTINGS_QUERY);
+  const shopResponseJson = await shopResponse.json();
+  const shopId = shopResponseJson.data?.shop?.id;
+
+  if (!shopId) {
+    return {
+      saved: false,
+      settings: null,
+      errors: { form: "Shopify could not identify this store. Try again." },
+    };
+  }
+
+  const saveResponse = await admin.graphql(SAVE_SETTINGS_MUTATION, {
+    variables: {
+      metafields: [
+        {
+          ownerId: shopId,
+          key: GIFT_MESSAGE_SETTINGS_KEY,
+          value: JSON.stringify(validation.settings),
+        },
+      ],
+    },
+  });
+  const saveResponseJson = await saveResponse.json();
+  const userErrors = saveResponseJson.data?.metafieldsSet?.userErrors ?? [];
+
+  if (userErrors.length > 0) {
+    return {
+      saved: false,
+      settings: null,
+      errors: {
+        form: userErrors
+          .map((error: { message: string }) => error.message)
+          .join(" "),
+      },
+    };
+  }
+
+  return { saved: true, settings: validation.settings, errors: {} };
+};
+
+function toFormState(settings: GiftMessageSettings) {
+  return { ...settings, maxLength: String(settings.maxLength) };
+}
+
+export default function Index() {
+  const { settings } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher<ActionData>();
   const shopify = useAppBridge();
-  const isLoading =
-    ["loading", "submitting"].includes(fetcher.state) &&
-    fetcher.formMethod === "POST";
+  const [form, setForm] = useState(() => toFormState(settings));
+  const errors = fetcher.data?.errors ?? {};
+  const isSaving = fetcher.state !== "idle";
 
   useEffect(() => {
-    if (fetcher.data?.product?.id) {
-      shopify.toast.show("Product created");
-    }
-  }, [fetcher.data?.product?.id, shopify]);
+    setForm(toFormState(settings));
+  }, [settings]);
 
-  const generateProduct = () => fetcher.submit({}, { method: "POST" });
+  useEffect(() => {
+    if (fetcher.data?.saved && fetcher.state === "idle") {
+      shopify.toast.show("Gift message settings saved");
+    }
+  }, [fetcher.data, fetcher.state, shopify]);
 
   return (
-    <s-page heading="Shopify app template">
-      <s-button slot="primary-action" onClick={generateProduct}>
-        Generate a product
-      </s-button>
+    <fetcher.Form method="post">
+      <input type="hidden" name="enabled" value={String(form.enabled)} />
+      <input type="hidden" name="required" value={String(form.required)} />
 
-      <s-section heading="Congrats on creating a new Shopify app 🎉">
-        <s-paragraph>
-          This embedded app template uses{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/tools/app-bridge"
-            target="_blank"
-          >
-            App Bridge
-          </s-link>{" "}
-          interface examples like an{" "}
-          <s-link href="/app/additional">additional page in the app nav</s-link>
-          , as well as an{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            Admin GraphQL
-          </s-link>{" "}
-          mutation demo, to provide a starting point for app development.
-        </s-paragraph>
-      </s-section>
-      <s-section heading="Get started with products">
-        <s-paragraph>
-          Generate a product with GraphQL and get the JSON output for that
-          product. Learn more about the{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql/latest/mutations/productCreate"
-            target="_blank"
-          >
-            productCreate
-          </s-link>{" "}
-          mutation in our API references. Includes a product{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data/metafields"
-            target="_blank"
-          >
-            metafield
-          </s-link>{" "}
-          and{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data/metaobjects"
-            target="_blank"
-          >
-            metaobject
-          </s-link>
-          .
-        </s-paragraph>
-        <s-stack direction="inline" gap="base">
-          <s-button
-            onClick={generateProduct}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Generate a product
-          </s-button>
-          {fetcher.data?.product && (
-            <s-button
-              onClick={() => {
-                shopify.intents.invoke?.("edit:shopify/Product", {
-                  value: fetcher.data?.product?.id,
-                });
-              }}
-              target="_blank"
-              variant="tertiary"
-            >
-              Edit product
-            </s-button>
-          )}
-        </s-stack>
-        {fetcher.data?.product && (
-          <s-section heading="productCreate mutation">
-            <s-stack direction="block" gap="base">
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>{JSON.stringify(fetcher.data.product, null, 2)}</code>
-                </pre>
-              </s-box>
+      <s-page heading="Gift message">
+        <s-button
+          slot="primary-action"
+          type="submit"
+          variant="primary"
+          {...(isSaving ? { loading: true } : {})}
+        >
+          Save
+        </s-button>
 
-              <s-heading>productVariantsBulkUpdate mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>{JSON.stringify(fetcher.data.variant, null, 2)}</code>
-                </pre>
-              </s-box>
-
-              <s-heading>metaobjectUpsert mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>
-                    {JSON.stringify(fetcher.data.metaobject, null, 2)}
-                  </code>
-                </pre>
-              </s-box>
-            </s-stack>
-          </s-section>
+        {errors.form && (
+          <s-banner heading="Settings could not be saved" tone="critical">
+            {errors.form}
+          </s-banner>
         )}
-      </s-section>
 
-      <s-section slot="aside" heading="App template specs">
-        <s-paragraph>
-          <s-text>Framework: </s-text>
-          <s-link href="https://reactrouter.com/" target="_blank">
-            React Router
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Interface: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/app-home/using-polaris-components"
-            target="_blank"
-          >
-            Polaris web components
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>API: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            GraphQL
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Custom data: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data"
-            target="_blank"
-          >
-            Metafields &amp; metaobjects
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Database: </s-text>
-          <s-link href="https://www.mongodb.com/atlas/database" target="_blank">
-            MongoDB Atlas
-          </s-link>
-        </s-paragraph>
-      </s-section>
+        <s-section heading="Checkout field">
+          <s-stack direction="block" gap="base">
+            <s-checkbox
+              label="Enable gift messages"
+              details="Show the gift-message field in checkout."
+              checked={form.enabled}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  enabled: event.currentTarget.checked ?? false,
+                }))
+              }
+            />
 
-      <s-section slot="aside" heading="Next steps">
-        <s-unordered-list>
-          <s-list-item>
-            Build an{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/getting-started/build-app-example"
-              target="_blank"
-            >
-              example app
-            </s-link>
-          </s-list-item>
-          <s-list-item>
-            Explore Shopify&apos;s API with{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/tools/graphiql-admin-api"
-              target="_blank"
-            >
-              GraphiQL
-            </s-link>
-          </s-list-item>
-        </s-unordered-list>
-      </s-section>
-    </s-page>
+            <s-text-field
+              label="Heading"
+              name="heading"
+              value={form.heading}
+              maxLength={60}
+              error={errors.heading}
+              onInput={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  heading: event.currentTarget.value ?? "",
+                }))
+              }
+              required
+            />
+
+            <s-text-area
+              label="Description"
+              name="description"
+              value={form.description}
+              rows={3}
+              maxLength={160}
+              error={errors.description}
+              onInput={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  description: event.currentTarget.value ?? "",
+                }))
+              }
+            />
+
+            <s-number-field
+              label="Maximum characters"
+              name="maxLength"
+              value={form.maxLength}
+              min={MIN_MESSAGE_LENGTH}
+              max={MAX_MESSAGE_LENGTH}
+              step={1}
+              inputMode="numeric"
+              error={errors.maxLength}
+              onInput={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  maxLength: event.currentTarget.value ?? "",
+                }))
+              }
+              required
+            />
+
+            <s-checkbox
+              label="Require a gift message"
+              details="Prevent checkout from continuing until a message is entered."
+              checked={form.required}
+              disabled={!form.enabled}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  required: event.currentTarget.checked ?? false,
+                }))
+              }
+            />
+          </s-stack>
+        </s-section>
+
+        <s-section heading="Checkout preview">
+          {form.enabled ? (
+            <s-stack direction="block" gap="base">
+              <s-heading>
+                {form.heading || DEFAULT_GIFT_MESSAGE_SETTINGS.heading}
+              </s-heading>
+              {form.description && (
+                <s-paragraph>{form.description}</s-paragraph>
+              )}
+              <s-text-area
+                label={
+                  form.required ? "Gift message" : "Gift message (optional)"
+                }
+                rows={3}
+                maxLength={Number(form.maxLength) || 250}
+                disabled
+              />
+            </s-stack>
+          ) : (
+            <s-banner tone="info">
+              The checkout field is currently hidden.
+            </s-banner>
+          )}
+        </s-section>
+
+        <s-section slot="aside" heading="Status">
+          <s-stack direction="block" gap="base">
+            <s-badge tone={form.enabled ? "success" : "neutral"}>
+              {form.enabled ? "Enabled" : "Disabled"}
+            </s-badge>
+            <s-paragraph>
+              {form.required
+                ? "Customers must enter a message."
+                : "The message is optional."}
+            </s-paragraph>
+            <s-paragraph>
+              Maximum length:{" "}
+              {form.maxLength || DEFAULT_GIFT_MESSAGE_SETTINGS.maxLength}
+            </s-paragraph>
+          </s-stack>
+        </s-section>
+      </s-page>
+    </fetcher.Form>
   );
 }
 

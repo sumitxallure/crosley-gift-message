@@ -2,6 +2,8 @@
   "heading": "Add a gift message",
   "description": "Write a short message to include with this order.",
   "label": "Gift message (optional)",
+  "requiredLabel": "Gift message",
+  "requiredError": "Enter a gift message before continuing.",
   "saved": "Gift message saved.",
   "saveError": "We couldn't save your gift message. Please try again.",
   "metafieldChangesAreNotSupported": "Gift messages aren't available with this checkout method."

@@ -18,6 +18,11 @@ description = "A customer gift message captured during checkout and copied to th
 access.admin = "merchant_read_write"
 capabilities.cart_to_order_copyable = true
 
+[shop.metafields.app.gift_message_settings]
+type = "json"
+name = "Gift message settings"
+description = "Controls the gift-message field shown in checkout."
+
 [webhooks]
 api_version = "2026-10"
 
