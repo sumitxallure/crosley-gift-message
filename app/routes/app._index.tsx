@@ -103,6 +103,7 @@ export const action = async ({
         {
           ownerId: shopId,
           key: GIFT_MESSAGE_SETTINGS_KEY,
+          type: "json",
           value: JSON.stringify(validation.settings),
         },
       ],
