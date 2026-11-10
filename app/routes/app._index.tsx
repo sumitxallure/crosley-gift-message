@@ -257,6 +257,7 @@ export default function Index() {
             <s-stack direction="block" gap="base">
               <s-heading>
                 {form.heading || DEFAULT_GIFT_MESSAGE_SETTINGS.heading}
+                {form.required ? " *" : ""}
               </s-heading>
               {form.description && (
                 <s-paragraph>{form.description}</s-paragraph>

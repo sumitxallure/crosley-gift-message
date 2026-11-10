@@ -122,7 +122,9 @@ function Extension() {
   }
 
   return (
-    <s-section heading={settings.heading}>
+    <s-section
+      heading={settings.required ? `${settings.heading} *` : settings.heading}
+    >
       <s-stack gap="base">
         {settings.description && <s-text>{settings.description}</s-text>}
         <s-text-area
