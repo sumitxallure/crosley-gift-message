@@ -175,12 +175,13 @@ export default function Index() {
               label="Enable gift messages"
               details="Show the gift-message field in checkout."
               checked={form.enabled}
-              onChange={(event) =>
+              onChange={(event) => {
+                const enabled = event.currentTarget.checked ?? false;
                 setForm((current) => ({
                   ...current,
-                  enabled: event.currentTarget.checked ?? false,
-                }))
-              }
+                  enabled,
+                }));
+              }}
             />
 
             <s-text-field
@@ -189,12 +190,13 @@ export default function Index() {
               value={form.heading}
               maxLength={60}
               error={errors.heading}
-              onInput={(event) =>
+              onInput={(event) => {
+                const heading = event.currentTarget.value ?? "";
                 setForm((current) => ({
                   ...current,
-                  heading: event.currentTarget.value ?? "",
-                }))
-              }
+                  heading,
+                }));
+              }}
               required
             />
 
@@ -205,12 +207,13 @@ export default function Index() {
               rows={3}
               maxLength={160}
               error={errors.description}
-              onInput={(event) =>
+              onInput={(event) => {
+                const description = event.currentTarget.value ?? "";
                 setForm((current) => ({
                   ...current,
-                  description: event.currentTarget.value ?? "",
-                }))
-              }
+                  description,
+                }));
+              }}
             />
 
             <s-number-field
@@ -222,12 +225,13 @@ export default function Index() {
               step={1}
               inputMode="numeric"
               error={errors.maxLength}
-              onInput={(event) =>
+              onInput={(event) => {
+                const maxLength = event.currentTarget.value ?? "";
                 setForm((current) => ({
                   ...current,
-                  maxLength: event.currentTarget.value ?? "",
-                }))
-              }
+                  maxLength,
+                }));
+              }}
               required
             />
 
@@ -236,12 +240,13 @@ export default function Index() {
               details="Prevent checkout from continuing until a message is entered."
               checked={form.required}
               disabled={!form.enabled}
-              onChange={(event) =>
+              onChange={(event) => {
+                const required = event.currentTarget.checked ?? false;
                 setForm((current) => ({
                   ...current,
-                  required: event.currentTarget.checked ?? false,
-                }))
-              }
+                  required,
+                }));
+              }}
             />
           </s-stack>
         </s-section>
