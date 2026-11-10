@@ -1,0 +1,15 @@
+query Input {
+  cart {
+    giftMessage: metafield(key: "gift_message") {
+      value
+    }
+  }
+  buyerJourney {
+    step
+  }
+  validation {
+    metafield(key: "gift_message_validation_settings") {
+      jsonValue
+    }
+  }
+}

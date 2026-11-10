@@ -1,4 +1,5 @@
 export const GIFT_MESSAGE_SETTINGS_KEY = "gift_message_settings";
+export const GIFT_MESSAGE_VALIDATION_ID_KEY = "gift_message_validation_id";
 export const MIN_MESSAGE_LENGTH = 50;
 export const MAX_MESSAGE_LENGTH = 500;
 

@@ -1,0 +1,18 @@
+{
+  "payload": {
+    "export": "cart_validations_generate_run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": { "giftMessage": null },
+      "buyerJourney": { "step": "CHECKOUT_COMPLETION" },
+      "validation": {
+        "metafield": {
+          "jsonValue": { "enabled": true, "required": false }
+        }
+      }
+    },
+    "output": {
+      "operations": [{ "validationAdd": { "errors": [] } }]
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "name": "Gift message validation",
+  "description": "Requires a gift message when the merchant enables that rule."
+}

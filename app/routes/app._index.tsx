@@ -11,6 +11,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   DEFAULT_GIFT_MESSAGE_SETTINGS,
   GIFT_MESSAGE_SETTINGS_KEY,
+  GIFT_MESSAGE_VALIDATION_ID_KEY,
   MAX_MESSAGE_LENGTH,
   MIN_MESSAGE_LENGTH,
   parseGiftMessageSettings,
@@ -18,6 +19,7 @@ import {
   type GiftMessageSettings,
   type GiftMessageSettingsErrors,
 } from "../gift-message-settings";
+import { syncGiftMessageValidation } from "../gift-message-validation.server";
 import { authenticate } from "../shopify.server";
 
 const SETTINGS_QUERY = `#graphql
@@ -29,6 +31,12 @@ const SETTINGS_QUERY = `#graphql
         key: "gift_message_settings"
       ) {
         jsonValue
+      }
+      giftMessageValidationId: metafield(
+        namespace: "$app"
+        key: "gift_message_validation_id"
+      ) {
+        value
       }
     }
   }
@@ -97,6 +105,26 @@ export const action = async ({
     };
   }
 
+  let validationId: string;
+  try {
+    validationId = await syncGiftMessageValidation(
+      admin,
+      validation.settings,
+      shopResponseJson.data?.shop?.giftMessageValidationId?.value,
+    );
+  } catch (error) {
+    return {
+      saved: false,
+      settings: null,
+      errors: {
+        form:
+          error instanceof Error
+            ? error.message
+            : "Shopify could not update the checkout validation.",
+      },
+    };
+  }
+
   const saveResponse = await admin.graphql(SAVE_SETTINGS_MUTATION, {
     variables: {
       metafields: [
@@ -105,6 +133,12 @@ export const action = async ({
           key: GIFT_MESSAGE_SETTINGS_KEY,
           type: "json",
           value: JSON.stringify(validation.settings),
+        },
+        {
+          ownerId: shopId,
+          key: GIFT_MESSAGE_VALIDATION_ID_KEY,
+          type: "single_line_text_field",
+          value: validationId,
         },
       ],
     },
